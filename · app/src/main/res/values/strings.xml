@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Voice Control Assistant</string>
-    <string name="accessibility_service_description">Voice Control Assistant needs accessibility access to inject text, scroll screens, and launch apps using voice commands.</string>
+    <string name="app_name">Jarvis AI</string>
+    <string name="accessibility_service_description">Jarvis AI Voice Control needs accessibility access to inject text, scroll screens, and launch apps using voice commands.</string>
 </resources>
+
