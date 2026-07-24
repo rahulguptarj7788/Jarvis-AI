@@ -24,25 +24,30 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v3
 
-      - name: Generate Gradle wrapper if missing
+      # डायग्नॉस्टिक: फ़ोल्डर स्ट्रक्चर दिखाएगा
+      - name: Show directory structure
         run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper --gradle-version 8.4
-          fi
+          echo "=== ROOT FILES ==="
+          ls -la
+          echo "=== SEARCHING FOR settings.gradle.kts ==="
+          find . -name settings.gradle.kts
+          echo "=== SEARCHING FOR app/build.gradle.kts ==="
+          find . -path "*/app/build.gradle.kts"
 
+      # Vosk मॉडल डाउनलोड करें (सुनिश्चित करें कि app फ़ोल्डर रूट में है)
       - name: Download Vosk model
         run: |
-          mkdir -p app/src/main/assets/models
+          if [ ! -d app/src/main/assets/models ]; then
+            mkdir -p app/src/main/assets/models
+          fi
           wget -q https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
           unzip -q vosk-model-small-en-us-0.15.zip
           mv vosk-model-small-en-us-0.15 app/src/main/assets/models/
           rm vosk-model-small-en-us-0.15.zip
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
+      # बिल्ड करें – सीधे gradle कमांड से, बिना wrapper के
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
