@@ -42,11 +42,8 @@ jobs:
       - name: List Gradle projects
         run: gradle projects
 
-      - name: List all tasks (with stacktrace)
-        run: gradle tasks --all --stacktrace || true
-
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: gradle :app:assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
