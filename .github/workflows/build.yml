@@ -1,4 +1,4 @@
-name: Build Debug APK with Vosk Model
+name: Build Debug APK
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -22,9 +22,15 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/gradle-build-action@v3
 
-      - name: Download Vosk small English model
+      - name: Generate Gradle wrapper if missing
+        run: |
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 8.4
+          fi
+
+      - name: Download Vosk model
         run: |
           mkdir -p app/src/main/assets/models
           wget -q https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
@@ -32,8 +38,11 @@ jobs:
           mv vosk-model-small-en-us-0.15 app/src/main/assets/models/
           rm vosk-model-small-en-us-0.15.zip
 
-      - name: Build debug APK using system gradle
-        run: gradle assembleDebug
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
