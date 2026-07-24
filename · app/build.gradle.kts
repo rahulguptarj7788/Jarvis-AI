@@ -18,11 +18,13 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
-    // Prevent AAPT from compressing Vosk binary model files (otherwise models become corrupted)
     aaptOptions {
         noCompress("nosym", "sso", "raw")
     }
