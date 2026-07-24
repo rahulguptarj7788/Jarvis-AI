@@ -31,6 +31,12 @@ jobs:
           echo "=== FIND app/build.gradle.kts ==="
           find . -path "*/app/build.gradle.kts"
 
+      # डायग्नोस्टिक: app/build.gradle.kts का कंटेंट दिखाएं
+      - name: Print app/build.gradle.kts content
+        run: |
+          echo "Content of app/build.gradle.kts:"
+          cat app/build.gradle.kts
+
       - name: Download Vosk model
         run: |
           mkdir -p app/src/main/assets/models
@@ -39,11 +45,12 @@ jobs:
           mv vosk-model-small-en-us-0.15 app/src/main/assets/models/
           rm vosk-model-small-en-us-0.15.zip
 
-      - name: List Gradle projects
-        run: gradle projects
+      # डायग्नोस्टिक: उपलब्ध टास्क दिखाएं
+      - name: List tasks for :app module
+        run: gradle :app:tasks --all
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug
+        run: gradle assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
