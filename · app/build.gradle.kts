@@ -16,6 +16,10 @@ android {
     }
 
     buildTypes {
+        // स्पष्ट रूप से debug बिल्ड टाइप परिभाषित करें
+        debug {
+            isMinifyEnabled = false
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
