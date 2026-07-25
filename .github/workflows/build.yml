@@ -43,8 +43,18 @@ jobs:
           mkdir -p $ASSETS_DIR
           wget -q $MODEL_URL -O /tmp/vosk-model.zip
           unzip -q /tmp/vosk-model.zip -d /tmp/vosk-extracted
-          mv /tmp/vosk-extracted/vosk-model-small-en-us-0.15 $ASSETS_DIR/
-          rm /tmp/vosk-model.zip
+          # Ensure the extracted folder exists and move it
+          if [ -d "/tmp/vosk-extracted/vosk-model-small-en-us-0.15" ]; then
+            mv /tmp/vosk-extracted/vosk-model-small-en-us-0.15 $ASSETS_DIR/
+          else
+            # If the zip contains files directly, create the folder manually
+            mkdir -p $ASSETS_DIR/vosk-model-small-en-us-0.15
+            mv /tmp/vosk-extracted/* $ASSETS_DIR/vosk-model-small-en-us-0.15/
+          fi
+          rm -rf /tmp/vosk-extracted /tmp/vosk-model.zip
+          # Verify model files are present (at least one .gz file should exist)
+          echo "Model files in assets:"
+          find $ASSETS_DIR -type f | head -20
 
       - name: Build debug APK
         uses: gradle/gradle-build-action@v3
