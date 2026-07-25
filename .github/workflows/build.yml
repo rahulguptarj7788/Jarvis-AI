@@ -1,11 +1,10 @@
-name: Build Debug APK
+name: Build Android APK
 
 on:
-  workflow_dispatch:
+  push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -21,39 +20,41 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@v3
-
-      - name: Show directory structure
+      - name: Setup Android SDK
         run: |
-          echo "=== ROOT ==="
-          ls -la
-          echo "=== FIND app/build.gradle.kts ==="
-          find . -path "*/app/build.gradle.kts"
+          cmdline_tools_url="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          wget -q $cmdline_tools_url -O commandlinetools.zip
+          unzip -q commandlinetools.zip -d $HOME/android-sdk
+          yes | $HOME/android-sdk/cmdline-tools/bin/sdkmanager --sdk_root=$HOME/android-sdk --install "cmdline-tools;latest" || true
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --install \
+            "platform-tools" \
+            "build-tools;34.0.0" \
+            "platforms;android-34"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      # डायग्नोस्टिक: app/build.gradle.kts का कंटेंट दिखाएं
-      - name: Print app/build.gradle.kts content
+      - name: Download Vosk model into app assets
         run: |
-          echo "Content of app/build.gradle.kts:"
-          cat app/build.gradle.kts
+          MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+          ASSETS_DIR="app/src/main/assets/models"
+          mkdir -p $ASSETS_DIR
+          wget -q $MODEL_URL -O /tmp/vosk-model.zip
+          unzip -q /tmp/vosk-model.zip -d /tmp/vosk-extracted
+          # The extracted folder is /tmp/vosk-extracted/vosk-model-small-en-us-0.15
+          mv /tmp/vosk-extracted/vosk-model-small-en-us-0.15 $ASSETS_DIR/
+          rm /tmp/vosk-model.zip
 
-      - name: Download Vosk model
-        run: |
-          mkdir -p app/src/main/assets/models
-          wget -q https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
-          unzip -q vosk-model-small-en-us-0.15.zip
-          mv vosk-model-small-en-us-0.15 app/src/main/assets/models/
-          rm vosk-model-small-en-us-0.15.zip
-
-      # डायग्नोस्टिक: उपलब्ध टास्क दिखाएं
-      - name: List tasks for :app module
-        run: gradle :app:tasks --all
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JarvisAI-debug
+          name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
