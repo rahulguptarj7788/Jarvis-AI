@@ -25,7 +25,6 @@ class VoskSpeechManager(
     companion object {
         private const val TAG = "VoskSpeechManager"
         private const val ASSETS_BASE = "models"
-        private const val DEFAULT_MODEL_DIR = "vosk-model-small-en-us-0.15"
         private const val DEST_DIR = "model"
     }
 
@@ -40,15 +39,27 @@ class VoskSpeechManager(
         if (isRunning) return
         isRunning = true
 
-        // Determine the exact asset path, with dynamic fallback
-        val modelAssetsPath = resolveModelAssetPath()
+        // 1. Find the model folder inside assets/models/
+        val modelAssetsPath = findModelInAssets()
         if (modelAssetsPath == null) {
-            listener.onError(IOException("No Vosk model folder found in assets/$ASSETS_BASE"))
+            val message = buildString {
+                append("No Vosk model folder found in assets/$ASSETS_BASE. ")
+                append("Detected contents: ")
+                try {
+                    val entries = context.assets.list(ASSETS_BASE)
+                    append(entries?.joinToString(", ") ?: "NULL")
+                } catch (e: Exception) {
+                    append("error listing: ${e.message}")
+                }
+            }
+            listener.onError(IOException(message))
             stop()
             return
         }
 
-        // Unpack (or re-use existing) model from assets
+        Log.i(TAG, "Using model assets path: $modelAssetsPath")
+
+        // 2. Unpack (or reuse) the model
         StorageService.unpack(
             context,
             modelAssetsPath,
@@ -58,8 +69,8 @@ class VoskSpeechManager(
                 initializeRecognizer()
             },
             { exception ->
-                Log.e(TAG, "Failed to unpack model from $modelAssetsPath", exception)
-                // Fallback: try to load already unpacked model from internal storage
+                Log.e(TAG, "StorageService.unpack failed for $modelAssetsPath", exception)
+                // Fallback: try to load an already unpacked model from previous run
                 val existingDir = File(context.filesDir, DEST_DIR)
                 if (existingDir.exists() && File(existingDir, "am").exists()) {
                     try {
@@ -70,7 +81,7 @@ class VoskSpeechManager(
                         stop()
                     }
                 } else {
-                    listener.onError(IOException("Model not found. Ensure the Vosk model is in assets/$modelAssetsPath and not compressed in the APK."))
+                    listener.onError(IOException("Model unpacking failed: ${exception.message}"))
                     stop()
                 }
             }
@@ -78,38 +89,34 @@ class VoskSpeechManager(
     }
 
     /**
-     * Returns the asset path to the model directory, trying the default name first,
-     * then dynamically scanning for the first subdirectory inside assets/models/.
+     * Scans assets/models/ and returns the path of the first subdirectory that looks like a model
+     * (contains an "am" directory). If no subdirs exist, it returns "models" if the base directory itself
+     * contains model files.
      */
-    private fun resolveModelAssetPath(): String? {
-        // Try the well-known path
-        val defaultPath = "$ASSETS_BASE/$DEFAULT_MODEL_DIR"
-        if (assetDirectoryExists(defaultPath)) return defaultPath
-
-        // Scan for any model folder
+    private fun findModelInAssets(): String? {
         try {
             val entries = context.assets.list(ASSETS_BASE) ?: return null
+            if (entries.isEmpty()) return null
+
+            // Check each entry to see if it's a directory containing an "am" subdirectory
             for (entry in entries) {
-                val candidatePath = "$ASSETS_BASE/$entry"
-                if (assetDirectoryExists(candidatePath)) {
-                    Log.i(TAG, "Found model folder via scan: $candidatePath")
-                    return candidatePath
+                val path = "$ASSETS_BASE/$entry"
+                val subList = context.assets.list(path)
+                if (subList != null && subList.contains("am")) {
+                    Log.i(TAG, "Found model directory: $path")
+                    return path
                 }
             }
+
+            // If none have "am", maybe the model files are directly inside assets/models/
+            if (entries.contains("am")) {
+                Log.i(TAG, "Model files directly inside $ASSETS_BASE")
+                return ASSETS_BASE
+            }
         } catch (e: IOException) {
-            Log.e(TAG, "Error scanning assets/$ASSETS_BASE", e)
+            Log.e(TAG, "Error listing assets/$ASSETS_BASE", e)
         }
         return null
-    }
-
-    /** Checks if an asset path exists and is a directory by listing its contents. */
-    private fun assetDirectoryExists(path: String): Boolean {
-        return try {
-            val list = context.assets.list(path)
-            list != null && list.isNotEmpty()
-        } catch (e: IOException) {
-            false
-        }
     }
 
     private fun initializeRecognizer() {
