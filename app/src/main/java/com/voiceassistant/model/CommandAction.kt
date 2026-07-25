@@ -1,9 +1,9 @@
 package com.voiceassistant.model
 
 sealed class CommandAction {
-    data class LaunchApp(val packageName: String) : CommandAction()
-    data class Scroll(val direction: ScrollDirection) : CommandAction()
+    data class OpenApp(val appName: String) : CommandAction()
+    data class Scroll(val direction: Direction) : CommandAction() {
+        enum class Direction { UP, DOWN }
+    }
     data class TypeText(val text: String) : CommandAction()
 }
-
-enum class ScrollDirection { UP, DOWN }
