@@ -3,6 +3,7 @@ package com.voiceassistant
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.voiceassistant.model.CommandAction
@@ -50,7 +51,6 @@ class VoiceControlAccessibilityService : AccessibilityService() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } else {
-            // Fallback: try to open by app name via a query intent
             val launchIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -71,7 +71,7 @@ class VoiceControlAccessibilityService : AccessibilityService() {
             lowerName.contains("calculator") -> "com.android.calculator2"
             lowerName.contains("calendar") -> "com.google.android.calendar"
             lowerName.contains("clock") -> "com.google.android.deskclock"
-            else -> "com.android.vending" // fallback
+            else -> "com.android.vending"
         }
     }
 
