@@ -28,8 +28,6 @@ class VoskSpeechManager(
         private const val TAG = "VoskSpeechManager"
         private const val ASSETS_BASE = "models"
         private const val DEST_DIR = "model"
-        private const val REQUIRED_FILE_AM = "am/final.mdl"
-        private const val REQUIRED_FILE_CONF = "conf/model.conf"
     }
 
     private var speechService: SpeechService? = null
@@ -54,22 +52,21 @@ class VoskSpeechManager(
             try {
                 val destDir = File(context.filesDir, DEST_DIR)
 
-                // Ensure model is complete; if not, delete and re‑copy
-                if (!modelDirectoryLooksValid(destDir)) {
-                    Log.w(TAG, "Model directory missing essential files. Deleting and re‑copying.")
-                    destDir.deleteRecursively()
-                    copyModelFromAssets(destDir)
-                    if (!modelDirectoryLooksValid(destDir)) {
-                        logDirectoryTree(destDir, 0)
-                        throw IOException("Failed to copy complete model from assets. Check logs.")
-                    }
+                // Always copy model fresh to avoid any corruption
+                copyModelFromAssetsFresh(destDir)
+
+                // Validate essential files exist
+                if (!isModelValid(destDir)) {
+                    throw IOException("Model files incomplete after copy. Check logs.")
                 }
 
-                // Load model – wrapped heavily for native crashes
+                // Load model
                 model = loadModelSafely(destDir.absolutePath)
 
+                // Create recognizer
                 recognizer = createRecognizerSafely(model)
 
+                // Start speech service
                 speechService = SpeechService(recognizer, 16000.0f)
                 speechService?.startListening(createVoskListener())
 
@@ -90,93 +87,88 @@ class VoskSpeechManager(
         }.start()
     }
 
-    // ---------------------------------------------------------------------------------
-    // Model directory validation
-    // ---------------------------------------------------------------------------------
-    private fun modelDirectoryLooksValid(dir: File): Boolean {
-        if (!dir.exists() || !dir.isDirectory) return false
-        val amFinalMdl = File(dir, REQUIRED_FILE_AM)
-        val confModelConf = File(dir, REQUIRED_FILE_CONF)
+    // ---------------------------------------------------------------
+    // Model validation & file listing
+    // ---------------------------------------------------------------
+    private fun isModelValid(modelDir: File): Boolean {
+        val amFinalMdl = File(modelDir, "am/final.mdl")
+        val conf = File(modelDir, "conf/model.conf")
         return amFinalMdl.exists() && amFinalMdl.length() > 0 &&
-                confModelConf.exists() && confModelConf.length() > 0
+                conf.exists() && conf.length() > 0
     }
 
-    private fun logDirectoryTree(dir: File, depth: Int) {
+    private fun logTree(dir: File, depth: Int) {
         if (!dir.exists()) return
         val prefix = "  ".repeat(depth)
-        for (file in dir.listFiles() ?: emptyArray()) {
-            if (file.isDirectory) {
-                Log.d(TAG, "$prefix[DIR]  ${file.name}")
-                logDirectoryTree(file, depth + 1)
+        for (f in dir.listFiles() ?: emptyArray()) {
+            if (f.isDirectory) {
+                Log.d(TAG, "$prefix[DIR ] ${f.name}")
+                logTree(f, depth + 1)
             } else {
-                Log.d(TAG, "$prefix[FILE] ${file.name}  (${file.length()} bytes)")
+                Log.d(TAG, "$prefix[FILE] ${f.name} (${f.length()} bytes)")
             }
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // Copy model from assets with robust recursion
-    // ---------------------------------------------------------------------------------
-    private fun copyModelFromAssets(destDir: File) {
-        val modelAssetsPath = findModelInAssets()
-            ?: throw IOException("No Vosk model folder found in assets/$ASSETS_BASE")
+    // ---------------------------------------------------------------
+    // Fresh copy of model from assets with perfect directory replication
+    // ---------------------------------------------------------------
+    private fun copyModelFromAssetsFresh(destDir: File) {
+        // Find model path in assets
+        val assetModelPath = findModelInAssets()
+            ?: throw IOException("No model folder found in assets/$ASSETS_BASE")
 
+        // Delete any previous model
+        if (destDir.exists()) {
+            destDir.deleteRecursively()
+        }
         if (!destDir.mkdirs()) {
             throw IOException("Cannot create model directory: ${destDir.absolutePath}")
         }
 
-        try {
-            copyAssetFolder(context.assets, modelAssetsPath, destDir.absolutePath)
-        } catch (e: IOException) {
-            Log.e(TAG, "Error copying assets", e)
-            throw e
-        }
+        // Use iterative BFS copy to ensure all directories and files are reproduced
+        copyAssetPathIterative(assetModelPath, destDir.absolutePath)
 
         Log.i(TAG, "Model copied to ${destDir.absolutePath}")
-        logDirectoryTree(destDir, 0)
+        logTree(destDir, 0)
     }
 
     /**
-     * Recursively copies assets from [assetPath] to [targetPath] on disk.
-     * This version correctly distinguishes files from directories by calling
-     * assetManager.list(). If list() returns null or an empty array, the path
-     * is treated as a file. Otherwise it's a directory and we create the
-     * corresponding target directory before recursing into its children.
+     * Iteratively copies all assets under [assetPath] to [targetPath] on disk.
+     * Handles both files and empty directories correctly.
      */
-    private fun copyAssetFolder(
-        assetManager: android.content.res.AssetManager,
-        assetPath: String,
-        targetPath: String
-    ) {
-        val childNames = assetManager.list(assetPath)
-        if (childNames == null || childNames.isEmpty()) {
-            // It's a file (or empty directory). Treat as file and copy.
-            try {
-                assetManager.open(assetPath).use { input ->
-                    val outFile = File(targetPath)
-                    // Ensure parent directory exists
-                    outFile.parentFile?.mkdirs()
-                    FileOutputStream(outFile).use { output ->
-                        input.copyTo(output)
+    private fun copyAssetPathIterative(assetPath: String, targetPath: String) {
+        val queue = ArrayDeque<Pair<String, String>>()
+        queue.addLast(Pair(assetPath, targetPath))
+
+        while (queue.isNotEmpty()) {
+            val (currentAsset, currentTarget) = queue.removeFirst()
+
+            val children = context.assets.list(currentAsset)
+            if (children == null) {
+                // It's a file, copy it
+                try {
+                    context.assets.open(currentAsset).use { input ->
+                        val outFile = File(currentTarget)
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { output ->
+                            input.copyTo(output)
+                        }
                     }
+                } catch (e: IOException) {
+                    Log.e(TAG, "Failed to copy asset file $currentAsset", e)
                 }
-            } catch (e: IOException) {
-                // Possibly an empty directory – ignore
-                Log.w(TAG, "Failed to copy asset file $assetPath -> $targetPath", e)
+            } else {
+                // It's a directory – create the target directory even if empty
+                val targetDir = File(currentTarget)
+                if (!targetDir.exists() && !targetDir.mkdirs()) {
+                    Log.e(TAG, "Failed to create directory $currentTarget")
+                }
+                // Enqueue all children
+                for (child in children) {
+                    queue.addLast(Pair("$currentAsset/$child", "$currentTarget/$child"))
+                }
             }
-            return
-        }
-
-        // It's a directory: create the target directory and recurse
-        val targetDir = File(targetPath)
-        if (!targetDir.exists()) {
-            targetDir.mkdirs()
-        }
-
-        for (child in childNames) {
-            val childAsset = "$assetPath/$child"
-            val childTarget = "$targetPath/$child"
-            copyAssetFolder(assetManager, childAsset, childTarget)
         }
     }
 
@@ -186,16 +178,14 @@ class VoskSpeechManager(
     private fun findModelInAssets(): String? {
         try {
             val entries = context.assets.list(ASSETS_BASE) ?: return null
-            if (entries.isEmpty()) return null
-
             for (entry in entries) {
                 val path = "$ASSETS_BASE/$entry"
-                val subList = context.assets.list(path)
-                if (subList != null && subList.contains("am")) {
+                val sub = context.assets.list(path)
+                if (sub != null && sub.contains("am")) {
                     return path
                 }
             }
-            // Maybe model files are directly inside models/
+            // Maybe model files are directly in models/
             if (entries.contains("am")) {
                 return ASSETS_BASE
             }
@@ -205,9 +195,9 @@ class VoskSpeechManager(
         return null
     }
 
-    // ---------------------------------------------------------------------------------
+    // ---------------------------------------------------------------
     // Safe Vosk object creation
-    // ---------------------------------------------------------------------------------
+    // ---------------------------------------------------------------
     private fun loadModelSafely(path: String): Model? {
         return try {
             Model(path)
@@ -233,9 +223,9 @@ class VoskSpeechManager(
         }
     }
 
-    // ---------------------------------------------------------------------------------
+    // ---------------------------------------------------------------
     // Speech listener and shutdown
-    // ---------------------------------------------------------------------------------
+    // ---------------------------------------------------------------
     private fun createVoskListener(): org.vosk.android.RecognitionListener {
         return object : org.vosk.android.RecognitionListener {
             override fun onPartialResult(hypothesis: String) {
