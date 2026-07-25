@@ -41,6 +41,10 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    aaptOptions {
+        noCompress("model")
+    }
 }
 
 dependencies {
