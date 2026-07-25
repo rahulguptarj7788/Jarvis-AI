@@ -9,17 +9,17 @@ android {
 
     defaultConfig {
         applicationId = "com.voiceassistant"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
     }
 
     buildTypes {
-        // स्पष्ट रूप से debug बिल्ड टाइप परिभाषित करें
-        debug {
-            isMinifyEnabled = false
-        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -27,10 +27,6 @@ android {
                 "proguard-rules.pro"
             )
         }
-    }
-
-    aaptOptions {
-        noCompress("nosym", "sso", "raw")
     }
 
     compileOptions {
@@ -41,11 +37,18 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    buildFeatures {
+        viewBinding = true
+    }
 }
 
 dependencies {
-    implementation("com.alphacephei:vosk-android:0.3.46")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // Vosk offline speech recognition
+    implementation("com.alphacephei:vosk-android:0.3.46")
 }
