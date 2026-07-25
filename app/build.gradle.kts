@@ -43,7 +43,7 @@ android {
     }
 
     aaptOptions {
-        noCompress("model")
+        noCompress("models")
     }
 }
 
