@@ -4,12 +4,11 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
-import org.vosk.android.StorageService
 import java.io.IOException
 
 class VoskSpeechManager(
     private val modelPath: String,
-    private val listener: RecognitionListenerImpl
+    private val listener: RecognitionListener
 ) {
     interface RecognitionListener {
         fun onPartialResult(hypothesis: String)
@@ -31,7 +30,7 @@ class VoskSpeechManager(
             model = Model(modelPath)
             recognizer = Recognizer(model, 16000.0f)
             speechService = SpeechService(recognizer, 16000.0f)
-            speechService?.startListening(object : RecognitionListener {
+            speechService?.startListening(object : org.vosk.android.RecognitionListener {
                 override fun onPartialResult(hypothesis: String) {
                     listener.onPartialResult(hypothesis)
                 }
