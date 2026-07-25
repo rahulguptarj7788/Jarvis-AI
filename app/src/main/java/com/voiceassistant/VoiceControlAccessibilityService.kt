@@ -2,8 +2,13 @@ package com.voiceassistant
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.GestureDescription
 import android.content.Intent
+import android.graphics.Path
+import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.util.DisplayMetrics
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.voiceassistant.model.CommandAction
@@ -21,7 +26,6 @@ class VoiceControlAccessibilityService : AccessibilityService() {
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-            canPerformGestures = true
             notificationTimeout = 100
         }
         this.serviceInfo = info
@@ -76,10 +80,34 @@ class VoiceControlAccessibilityService : AccessibilityService() {
     }
 
     private fun scrollScreen(direction: CommandAction.Scroll.Direction) {
-        when (direction) {
-            CommandAction.Scroll.Direction.UP -> performGlobalAction(GLOBAL_ACTION_SCROLL_BACKWARD)
-            CommandAction.Scroll.Direction.DOWN -> performGlobalAction(GLOBAL_ACTION_SCROLL_FORWARD)
+        // Simulate a vertical swipe gesture
+        val displayMetrics = resources.displayMetrics
+        val width = displayMetrics.widthPixels
+        val height = displayMetrics.heightPixels
+
+        val startX = width / 2f
+        val startY: Float
+        val endY: Float
+
+        // Swipe up -> scroll down (show lower content)
+        // Swipe down -> scroll up (show upper content)
+        if (direction == CommandAction.Scroll.Direction.DOWN) {
+            startY = height * 0.7f
+            endY = height * 0.3f
+        } else { // UP
+            startY = height * 0.3f
+            endY = height * 0.7f
         }
+
+        val swipePath = Path().apply {
+            moveTo(startX, startY)
+            lineTo(startX, endY)
+        }
+
+        val gestureBuilder = GestureDescription.Builder()
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 0, 500))
+
+        dispatchGesture(gestureBuilder.build(), null, null)
     }
 
     private fun typeText(text: String) {
