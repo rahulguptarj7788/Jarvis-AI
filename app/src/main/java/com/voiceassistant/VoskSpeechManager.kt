@@ -1,16 +1,19 @@
 package com.voiceassistant
 
+import android.content.Context
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
+import org.vosk.android.StorageService
 import java.io.IOException
 
 class VoskSpeechManager(
-    private val modelPath: String,
+    private val context: Context,
     private val listener: RecognitionListener
 ) {
     interface RecognitionListener {
+        fun onReady()
         fun onPartialResult(hypothesis: String)
         fun onFinalResult(hypothesis: String)
         fun onError(exception: Exception)
@@ -26,38 +29,58 @@ class VoskSpeechManager(
 
     fun start() {
         if (isRunning) return
-        try {
-            model = Model(modelPath)
-            recognizer = Recognizer(model, 16000.0f)
-            speechService = SpeechService(recognizer, 16000.0f)
-            speechService?.startListening(object : org.vosk.android.RecognitionListener {
-                override fun onPartialResult(hypothesis: String) {
-                    listener.onPartialResult(hypothesis)
-                }
+        isRunning = true
 
-                override fun onResult(hypothesis: String) {
-                    listener.onFinalResult(hypothesis)
+        // Unpack model from assets to internal storage, then initialize
+        StorageService.unpack(
+            context,
+            "models/vosk-model-small-en-us-0.15",   // source folder in assets
+            "model",                                 // destination folder name in internal storage
+            { modelInstance ->
+                // Called when model is ready
+                model = modelInstance
+                try {
+                    recognizer = Recognizer(model, 16000.0f)
+                    speechService = SpeechService(recognizer, 16000.0f)
+                    speechService?.startListening(createVoskListener())
+                    listener.onReady()
+                } catch (e: IOException) {
+                    listener.onError(e)
                     stop()
                 }
+            },
+            { exception ->
+                listener.onError(exception)
+                stop()
+            }
+        )
+    }
 
-                override fun onFinalResult(hypothesis: String) {
-                    listener.onFinalResult(hypothesis)
-                    stop()
-                }
+    private fun createVoskListener(): org.vosk.android.RecognitionListener {
+        return object : org.vosk.android.RecognitionListener {
+            override fun onPartialResult(hypothesis: String) {
+                listener.onPartialResult(hypothesis)
+            }
 
-                override fun onError(exception: Exception) {
-                    listener.onError(exception)
-                    stop()
-                }
+            override fun onResult(hypothesis: String) {
+                listener.onFinalResult(hypothesis)
+                stop()
+            }
 
-                override fun onTimeout() {
-                    listener.onTimeout()
-                    stop()
-                }
-            })
-            isRunning = true
-        } catch (e: IOException) {
-            listener.onError(e)
+            override fun onFinalResult(hypothesis: String) {
+                listener.onFinalResult(hypothesis)
+                stop()
+            }
+
+            override fun onError(exception: Exception) {
+                listener.onError(exception)
+                stop()
+            }
+
+            override fun onTimeout() {
+                listener.onTimeout()
+                stop()
+            }
         }
     }
 
