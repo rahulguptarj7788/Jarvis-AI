@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.voiceassistant"
+    namespace = "com.myjarvis.app"   // <-- new application ID
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.voiceassistant"
+        applicationId = "com.myjarvis.app"  // redundant but explicit
         minSdk = 24
         targetSdk = 34
         versionCode = 1
