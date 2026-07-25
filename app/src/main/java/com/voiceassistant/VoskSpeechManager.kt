@@ -1,10 +1,12 @@
 package com.voiceassistant
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import org.vosk.Model
 import org.vosk.Recognizer
-import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
 import java.io.File
 import java.io.FileOutputStream
@@ -39,54 +41,131 @@ class VoskSpeechManager(
         if (isRunning) return
         isRunning = true
 
+        // Check microphone permission before any heavy work
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) {
+            listener.onError(SecurityException("Microphone permission (RECORD_AUDIO) not granted"))
+            stop()
+            return
+        }
+
         Thread {
             try {
-                // 1. Find model folder inside assets/models/
-                val modelAssetsPath = findModelInAssets()
-                if (modelAssetsPath == null) {
-                    val message = buildString {
-                        append("No Vosk model folder found in assets/$ASSETS_BASE. ")
-                        append("Detected contents: ")
-                        try {
-                            val entries = context.assets.list(ASSETS_BASE)
-                            append(entries?.joinToString(", ") ?: "NULL")
-                        } catch (e: Exception) {
-                            append("error listing: ${e.message}")
-                        }
-                    }
-                    throw IOException(message)
-                }
-
-                Log.i(TAG, "Using model assets path: $modelAssetsPath")
-
-                // 2. Prepare clean destination directory
+                ensureModelReady()
                 val destDir = File(context.filesDir, DEST_DIR)
-                if (destDir.exists()) {
+                if (!modelDirectoryLooksValid(destDir)) {
+                    // Something is corrupted, delete and re‑copy
                     destDir.deleteRecursively()
+                    copyModelFromAssets(destDir)
+                    if (!modelDirectoryLooksValid(destDir)) {
+                        throw IOException("Model files incomplete after copy from assets")
+                    }
                 }
-                if (!destDir.mkdirs()) {
-                    throw IOException("Failed to create destination directory: ${destDir.absolutePath}")
-                }
 
-                // 3. Copy model from assets to internal storage
-                copyAssetFolder(context.assets, modelAssetsPath, destDir.absolutePath)
+                // Load the model – native code might crash, wrap in catch all
+                model = loadModelSafely(destDir.absolutePath)
 
-                Log.i(TAG, "Model copied to ${destDir.absolutePath}")
+                // Create recognizer – also wrapped
+                recognizer = createRecognizerSafely(model)
 
-                // 4. Load model directly from the copied files
-                model = Model(destDir.absolutePath)
-                initializeRecognizer()
+                // Start speech service
+                speechService = SpeechService(recognizer, 16000.0f)
+                speechService?.startListening(createVoskListener())
 
+                listener.onReady()
             } catch (e: Exception) {
-                Log.e(TAG, "Model initialization failed", e)
+                Log.e(TAG, "Failed to start Vosk", e)
                 listener.onError(e)
+                stop()
+            } catch (e: Error) {
+                Log.e(TAG, "Native error during Vosk initialization", e)
+                listener.onError(RuntimeException("Vosk native error: ${e.message}"))
+                stop()
+            } catch (t: Throwable) {
+                Log.e(TAG, "Unexpected throwable", t)
+                listener.onError(RuntimeException("Unexpected error: ${t.message}"))
                 stop()
             }
         }.start()
     }
 
     /**
-     * Recursively copies all files and folders from the given asset path to the target file system directory.
+     * Ensures the model directory exists and contains valid model files.
+     */
+    private fun ensureModelReady() {
+        val destDir = File(context.filesDir, DEST_DIR)
+        if (!destDir.exists() || !modelDirectoryLooksValid(destDir)) {
+            // Delete any partial data
+            destDir.deleteRecursively()
+            copyModelFromAssets(destDir)
+        }
+    }
+
+    /**
+     * Copies the model from assets/models/ to the internal storage destination.
+     */
+    private fun copyModelFromAssets(destDir: File) {
+        val modelAssetsPath = findModelInAssets()
+            ?: throw IOException("No Vosk model folder found in assets/$ASSETS_BASE")
+
+        if (!destDir.mkdirs()) {
+            throw IOException("Cannot create model directory: ${destDir.absolutePath}")
+        }
+
+        copyAssetFolder(context.assets, modelAssetsPath, destDir.absolutePath)
+        Log.i(TAG, "Model copied to ${destDir.absolutePath}")
+    }
+
+    /**
+     * Checks that the model directory contains the essential file "am/final.mdl"
+     * or at least the "am" subdirectory with some files.
+     */
+    private fun modelDirectoryLooksValid(modelDir: File): Boolean {
+        if (!modelDir.exists() || !modelDir.isDirectory) return false
+        val amDir = File(modelDir, "am")
+        // Minimum check: am directory exists and contains final.mdl
+        if (amDir.exists() && amDir.isDirectory) {
+            val finalMdl = File(amDir, "final.mdl")
+            if (finalMdl.exists() && finalMdl.length() > 0) return true
+        }
+        // Alternative: some models have "ivector" or "conf" instead; we'll be strict
+        Log.w(TAG, "Model directory missing essential files: ${modelDir.absolutePath}")
+        return false
+    }
+
+    /**
+     * Loads a Vosk Model safely, catching native crashes.
+     */
+    private fun loadModelSafely(path: String): Model? {
+        return try {
+            Model(path)
+        } catch (e: Exception) {
+            Log.e(TAG, "Model(path) threw Exception", e)
+            throw e
+        } catch (e: Error) {
+            Log.e(TAG, "Model(path) threw Error (native crash)", e)
+            throw RuntimeException("Native crash while loading model", e)
+        }
+    }
+
+    /**
+     * Creates a Recognizer from a Model safely.
+     */
+    private fun createRecognizerSafely(model: Model?): Recognizer {
+        if (model == null) throw IOException("Model is null")
+        return try {
+            Recognizer(model, 16000.0f)
+        } catch (e: Exception) {
+            Log.e(TAG, "Recognizer creation failed", e)
+            throw e
+        } catch (e: Error) {
+            Log.e(TAG, "Recognizer creation crashed (native)", e)
+            throw RuntimeException("Native crash while creating recognizer", e)
+        }
+    }
+
+    /**
+     * Recursively copies asset files/folders to the target path.
      */
     private fun copyAssetFolder(
         assetManager: android.content.res.AssetManager,
@@ -95,7 +174,7 @@ class VoskSpeechManager(
     ) {
         val files: Array<String>? = assetManager.list(assetPath)
         if (files == null || files.isEmpty()) {
-            // If no children, it might be a single file – try to copy it
+            // It's a single file
             try {
                 assetManager.open(assetPath).use { input ->
                     val outFile = File(targetPath)
@@ -104,33 +183,30 @@ class VoskSpeechManager(
                     }
                 }
             } catch (e: IOException) {
-                // It's a directory, ignore the copy attempt
+                // Might be an empty directory, ignore
             }
             return
         }
 
-        // It's a directory; create it and recurse
         val dir = File(targetPath)
         if (!dir.exists()) {
             dir.mkdirs()
         }
-
         for (file in files) {
-            val childAssetPath = "$assetPath/$file"
-            val childTargetPath = "$targetPath/$file"
-            copyAssetFolder(assetManager, childAssetPath, childTargetPath)
+            val childAsset = "$assetPath/$file"
+            val childTarget = "$targetPath/$file"
+            copyAssetFolder(assetManager, childAsset, childTarget)
         }
     }
 
     /**
-     * Finds the first model folder inside assets/models/ that contains an "am" directory.
+     * Scans assets/models/ for a subdirectory containing an "am" folder.
      */
     private fun findModelInAssets(): String? {
         try {
             val entries = context.assets.list(ASSETS_BASE) ?: return null
             if (entries.isEmpty()) return null
 
-            // Look for a subdirectory that contains "am"
             for (entry in entries) {
                 val path = "$ASSETS_BASE/$entry"
                 val subList = context.assets.list(path)
@@ -138,27 +214,14 @@ class VoskSpeechManager(
                     return path
                 }
             }
-
-            // Maybe the model files are directly inside assets/models/
+            // Maybe model files are directly in models/
             if (entries.contains("am")) {
                 return ASSETS_BASE
             }
         } catch (e: IOException) {
-            Log.e(TAG, "Error listing assets/$ASSETS_BASE", e)
+            Log.e(TAG, "Error scanning assets/$ASSETS_BASE", e)
         }
         return null
-    }
-
-    private fun initializeRecognizer() {
-        try {
-            recognizer = Recognizer(model, 16000.0f)
-            speechService = SpeechService(recognizer, 16000.0f)
-            speechService?.startListening(createVoskListener())
-            listener.onReady()
-        } catch (e: IOException) {
-            listener.onError(e)
-            stop()
-        }
     }
 
     private fun createVoskListener(): org.vosk.android.RecognitionListener {
@@ -191,11 +254,19 @@ class VoskSpeechManager(
 
     fun stop() {
         isRunning = false
-        speechService?.stop()
+        try {
+            speechService?.stop()
+        } catch (_: Exception) {}
         speechService = null
-        recognizer?.close()
+
+        try {
+            recognizer?.close()
+        } catch (_: Exception) {}
         recognizer = null
-        model?.close()
+
+        try {
+            model?.close()
+        } catch (_: Exception) {}
         model = null
     }
 }
