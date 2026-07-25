@@ -24,10 +24,8 @@ class VoskSpeechManager(
 
     companion object {
         private const val TAG = "VoskSpeechManager"
-        // Matches the folder created by the build workflow:
-        // app/src/main/assets/models/vosk-model-small-en-us-0.15/
-        private const val ASSETS_MODEL_PATH = "models/vosk-model-small-en-us-0.15"
-        // Destination inside internal storage
+        private const val ASSETS_BASE = "models"
+        private const val DEFAULT_MODEL_DIR = "vosk-model-small-en-us-0.15"
         private const val DEST_DIR = "model"
     }
 
@@ -42,33 +40,76 @@ class VoskSpeechManager(
         if (isRunning) return
         isRunning = true
 
-        // Try to unpack the model from assets. If it already exists, StorageService will skip.
+        // Determine the exact asset path, with dynamic fallback
+        val modelAssetsPath = resolveModelAssetPath()
+        if (modelAssetsPath == null) {
+            listener.onError(IOException("No Vosk model folder found in assets/$ASSETS_BASE"))
+            stop()
+            return
+        }
+
+        // Unpack (or re-use existing) model from assets
         StorageService.unpack(
             context,
-            ASSETS_MODEL_PATH,
+            modelAssetsPath,
             DEST_DIR,
             { modelInstance ->
                 model = modelInstance
                 initializeRecognizer()
             },
             { exception ->
-                Log.e(TAG, "Failed to unpack model from assets: $ASSETS_MODEL_PATH", exception)
-                // Fallback: check if model was already unpacked previously
-                val existingModelPath = File(context.filesDir, DEST_DIR).absolutePath
-                if (File(existingModelPath).exists() && File(existingModelPath, "am").exists()) {
+                Log.e(TAG, "Failed to unpack model from $modelAssetsPath", exception)
+                // Fallback: try to load already unpacked model from internal storage
+                val existingDir = File(context.filesDir, DEST_DIR)
+                if (existingDir.exists() && File(existingDir, "am").exists()) {
                     try {
-                        model = Model(existingModelPath)
+                        model = Model(existingDir.absolutePath)
                         initializeRecognizer()
                     } catch (e: IOException) {
                         listener.onError(e)
                         stop()
                     }
                 } else {
-                    listener.onError(IOException("Model not found. Please ensure the Vosk model is in assets/$ASSETS_MODEL_PATH and not compressed in the APK."))
+                    listener.onError(IOException("Model not found. Ensure the Vosk model is in assets/$modelAssetsPath and not compressed in the APK."))
                     stop()
                 }
             }
         )
+    }
+
+    /**
+     * Returns the asset path to the model directory, trying the default name first,
+     * then dynamically scanning for the first subdirectory inside assets/models/.
+     */
+    private fun resolveModelAssetPath(): String? {
+        // Try the well-known path
+        val defaultPath = "$ASSETS_BASE/$DEFAULT_MODEL_DIR"
+        if (assetDirectoryExists(defaultPath)) return defaultPath
+
+        // Scan for any model folder
+        try {
+            val entries = context.assets.list(ASSETS_BASE) ?: return null
+            for (entry in entries) {
+                val candidatePath = "$ASSETS_BASE/$entry"
+                if (assetDirectoryExists(candidatePath)) {
+                    Log.i(TAG, "Found model folder via scan: $candidatePath")
+                    return candidatePath
+                }
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Error scanning assets/$ASSETS_BASE", e)
+        }
+        return null
+    }
+
+    /** Checks if an asset path exists and is a directory by listing its contents. */
+    private fun assetDirectoryExists(path: String): Boolean {
+        return try {
+            val list = context.assets.list(path)
+            list != null && list.isNotEmpty()
+        } catch (e: IOException) {
+            false
+        }
     }
 
     private fun initializeRecognizer() {
