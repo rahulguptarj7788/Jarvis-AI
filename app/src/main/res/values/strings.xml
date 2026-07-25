@@ -1,6 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Jarvis AI</string>
-    <string name="accessibility_service_description">Jarvis AI Voice Control needs accessibility access to inject text, scroll screens, and launch apps using voice commands.</string>
+    <string name="start_listening">Start Listening</string>
+    <string name="stop_listening">Stop Listening</string>
+    <string name="status_not_listening">Tap the button and speak a command</string>
+    <string name="status_listening">Listening…</string>
+    <string name="open_accessibility_settings">Open Accessibility Settings</string>
+    <string name="accessibility_service_description">Jarvis AI Accessibility Service – performs voice‑controlled actions like opening apps, scrolling, and typing.</string>
 </resources>
-
