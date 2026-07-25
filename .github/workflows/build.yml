@@ -43,15 +43,13 @@ jobs:
           mkdir -p $ASSETS_DIR
           wget -q $MODEL_URL -O /tmp/vosk-model.zip
           unzip -q /tmp/vosk-model.zip -d /tmp/vosk-extracted
-          # The extracted folder is /tmp/vosk-extracted/vosk-model-small-en-us-0.15
           mv /tmp/vosk-extracted/vosk-model-small-en-us-0.15 $ASSETS_DIR/
           rm /tmp/vosk-model.zip
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        uses: gradle/gradle-build-action@v3
+        with:
+          arguments: assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
