@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.voiceassistant">
 
+    <!-- Required for microphone input -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Required for downloading the Vosk model at runtime -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Optional: for floating UI if needed later -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-feature
@@ -17,7 +23,7 @@
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <activity
-            android:name="com.voiceassistant.MainActivity"
+            android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,8 +31,9 @@
             </intent-filter>
         </activity>
 
+        <!-- Accessibility service for performing voice-controlled actions -->
         <service
-            android:name="com.voiceassistant.VoiceControlAccessibilityService"
+            android:name=".VoiceControlAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
