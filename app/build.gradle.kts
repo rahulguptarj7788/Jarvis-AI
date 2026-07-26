@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.myjarvis.assistant"
+    namespace = "com.voiceassistant"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.myjarvis.assistant"
+        applicationId = "com.voiceassistant"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -41,6 +41,10 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    aaptOptions {
+        noCompress("models")
+    }
 }
 
 dependencies {
@@ -48,5 +52,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // Vosk offline speech recognition
     implementation("com.alphacephei:vosk-android:0.3.46")
 }
