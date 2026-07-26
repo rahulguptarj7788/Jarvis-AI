@@ -4,11 +4,20 @@ plugins {
 }
 
 android {
-    namespace = "com.myjarvis.app"   // <-- new application ID
+    namespace = "com.myjarvis.app"
     compileSdk = 34
 
+    signingConfigs {
+        create("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
-        applicationId = "com.myjarvis.app"  // redundant but explicit
+        applicationId = "com.myjarvis.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -20,6 +29,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -52,7 +64,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-
-    // Vosk offline speech recognition
     implementation("com.alphacephei:vosk-android:0.3.46")
 }
