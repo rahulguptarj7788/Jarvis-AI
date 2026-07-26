@@ -4,20 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.myjarvis.app"
+    namespace = "com.myjarvis.assistant"
     compileSdk = 34
 
-    signingConfigs {
-        create("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-
     defaultConfig {
-        applicationId = "com.myjarvis.app"
+        applicationId = "com.myjarvis.assistant"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -29,9 +20,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            signingConfig = signingConfigs.getByName("debug")
-        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -52,10 +40,6 @@ android {
 
     buildFeatures {
         viewBinding = true
-    }
-
-    aaptOptions {
-        noCompress("models")
     }
 }
 
