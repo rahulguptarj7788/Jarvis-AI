@@ -11,6 +11,9 @@ import org.vosk.android.SpeechService
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.zip.ZipInputStream
 
 class VoskSpeechManager(
     private val context: Context,
@@ -26,8 +29,9 @@ class VoskSpeechManager(
 
     companion object {
         private const val TAG = "VoskSpeechManager"
-        private const val ASSETS_BASE = "models"
+        private const val MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
         private const val DEST_DIR = "model"
+        private const val REQUIRED_FILE = "am/final.mdl"
     }
 
     private var speechService: SpeechService? = null
@@ -50,121 +54,85 @@ class VoskSpeechManager(
 
         Thread {
             try {
-                val destDir = File(context.filesDir, DEST_DIR)
-
-                // Delete & recopy model from assets every time to avoid corruption
-                copyModelFromAssetsFresh(destDir)
-
-                if (!isModelValid(destDir)) {
-                    throw IOException("Model files incomplete after copy. Check logs.")
+                val modelDir = File(context.filesDir, DEST_DIR)
+                if (!isModelValid(modelDir)) {
+                    modelDir.deleteRecursively()
+                    downloadAndUnzipModel(modelDir)
+                    if (!isModelValid(modelDir)) {
+                        throw IOException("Model download succeeded but required files missing")
+                    }
                 }
 
-                model = loadModelSafely(destDir.absolutePath)
+                model = loadModelSafely(modelDir.absolutePath)
                 recognizer = createRecognizerSafely(model)
 
                 speechService = SpeechService(recognizer, 16000.0f)
                 speechService?.startListening(createVoskListener())
+
                 listener.onReady()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start Vosk", e)
                 listener.onError(e)
                 stop()
             } catch (e: Error) {
-                Log.e(TAG, "Native error during Vosk initialization", e)
+                Log.e(TAG, "Native error", e)
                 listener.onError(RuntimeException("Vosk native error: ${e.message}"))
                 stop()
             } catch (t: Throwable) {
                 Log.e(TAG, "Unexpected throwable", t)
-                listener.onError(RuntimeException("Unexpected error: ${t.message}"))
+                listener.onError(RuntimeException("Unexpected: ${t.message}"))
                 stop()
             }
         }.start()
     }
 
     private fun isModelValid(modelDir: File): Boolean {
-        val amFinalMdl = File(modelDir, "am/final.mdl")
+        val amFinalMdl = File(modelDir, REQUIRED_FILE)
         val conf = File(modelDir, "conf/model.conf")
         return amFinalMdl.exists() && amFinalMdl.length() > 0 &&
                 conf.exists() && conf.length() > 0
     }
 
-    private fun copyModelFromAssetsFresh(destDir: File) {
-        val assetModelPath = findModelInAssets()
-            ?: throw IOException("No model folder found in assets/$ASSETS_BASE")
-
-        if (destDir.exists()) {
-            destDir.deleteRecursively()
-        }
-        if (!destDir.mkdirs()) {
-            throw IOException("Cannot create model directory: ${destDir.absolutePath}")
-        }
-
-        copyAssetPathIterative(assetModelPath, destDir.absolutePath)
-        Log.i(TAG, "Model copied to ${destDir.absolutePath}")
-        logTree(destDir, 0)
-    }
-
-    private fun copyAssetPathIterative(assetPath: String, targetPath: String) {
-        val queue = ArrayDeque<Pair<String, String>>()
-        queue.addLast(Pair(assetPath, targetPath))
-
-        while (queue.isNotEmpty()) {
-            val (currentAsset, currentTarget) = queue.removeFirst()
-            val children = context.assets.list(currentAsset)
-            if (children == null) {
-                // It's a file
-                try {
-                    context.assets.open(currentAsset).use { input ->
-                        val outFile = File(currentTarget)
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                } catch (e: IOException) {
-                    Log.e(TAG, "Failed to copy asset file $currentAsset", e)
-                }
-            } else {
-                // It's a directory
-                val targetDir = File(currentTarget)
-                if (!targetDir.exists() && !targetDir.mkdirs()) {
-                    Log.e(TAG, "Failed to create directory $currentTarget")
-                }
-                for (child in children) {
-                    queue.addLast(Pair("$currentAsset/$child", "$currentTarget/$child"))
-                }
-            }
-        }
-    }
-
-    private fun findModelInAssets(): String? {
+    private fun downloadAndUnzipModel(targetDir: File) {
+        val zipFile = File(context.cacheDir, "vosk-model.zip")
         try {
-            val entries = context.assets.list(ASSETS_BASE) ?: return null
-            for (entry in entries) {
-                val path = "$ASSETS_BASE/$entry"
-                val sub = context.assets.list(path)
-                if (sub != null && sub.contains("am")) {
-                    return path
-                }
+            Log.i(TAG, "Downloading model from $MODEL_URL")
+            val connection = URL(MODEL_URL).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 30000
+            connection.readTimeout = 60000
+            connection.connect()
+
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                throw IOException("Download failed with HTTP ${connection.responseCode}")
             }
-            if (entries.contains("am")) {
-                return ASSETS_BASE
+
+            connection.inputStream.use { input ->
+                FileOutputStream(zipFile).use { output -> input.copyTo(output) }
             }
-        } catch (e: IOException) {
-            Log.e(TAG, "Error scanning assets/$ASSETS_BASE", e)
+            Log.i(TAG, "Downloaded model: ${zipFile.length()} bytes")
+
+            if (!targetDir.mkdirs()) throw IOException("Cannot create model dir")
+            unzip(zipFile, targetDir)
+            Log.i(TAG, "Unzipped model to ${targetDir.absolutePath}")
+        } finally {
+            zipFile.delete()
         }
-        return null
     }
 
-    private fun logTree(dir: File, depth: Int) {
-        if (!dir.exists()) return
-        val prefix = "  ".repeat(depth)
-        for (f in dir.listFiles() ?: emptyArray()) {
-            if (f.isDirectory) {
-                Log.d(TAG, "$prefix[DIR ] ${f.name}")
-                logTree(f, depth + 1)
-            } else {
-                Log.d(TAG, "$prefix[FILE] ${f.name} (${f.length()} bytes)")
+    private fun unzip(zipFile: File, targetDir: File) {
+        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                val entryFile = File(targetDir, entry.name)
+                if (entry.isDirectory) {
+                    entryFile.mkdirs()
+                } else {
+                    entryFile.parentFile?.mkdirs()
+                    FileOutputStream(entryFile).use { output -> zis.copyTo(output) }
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
             }
         }
     }
@@ -173,10 +141,10 @@ class VoskSpeechManager(
         return try {
             Model(path)
         } catch (e: Exception) {
-            Log.e(TAG, "Model(path) threw Exception", e)
+            Log.e(TAG, "Model(path) Exception", e)
             throw e
         } catch (e: Error) {
-            Log.e(TAG, "Model(path) threw Error (native crash)", e)
+            Log.e(TAG, "Model(path) Error (native crash)", e)
             throw RuntimeException("Native crash while loading model", e)
         }
     }
@@ -189,8 +157,8 @@ class VoskSpeechManager(
             Log.e(TAG, "Recognizer creation failed", e)
             throw e
         } catch (e: Error) {
-            Log.e(TAG, "Recognizer creation crashed (native)", e)
-            throw RuntimeException("Native crash while creating recognizer", e)
+            Log.e(TAG, "Recognizer creation crashed", e)
+            throw RuntimeException("Native crash creating recognizer", e)
         }
     }
 
