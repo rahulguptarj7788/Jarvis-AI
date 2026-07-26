@@ -57,3 +57,5 @@ jobs:
         with:
           name: JarvisAI-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
+          # i am king
