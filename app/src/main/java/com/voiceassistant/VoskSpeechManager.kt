@@ -11,9 +11,6 @@ import org.vosk.android.SpeechService
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.zip.ZipInputStream
 
 class VoskSpeechManager(
     private val context: Context,
@@ -29,9 +26,8 @@ class VoskSpeechManager(
 
     companion object {
         private const val TAG = "VoskSpeechManager"
-        private const val MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+        private const val ASSETS_BASE = "models"
         private const val DEST_DIR = "model"
-        private const val REQUIRED_FILE = "am/final.mdl"
     }
 
     private var speechService: SpeechService? = null
@@ -54,23 +50,20 @@ class VoskSpeechManager(
 
         Thread {
             try {
-                val modelDir = File(context.filesDir, DEST_DIR)
-                if (!isModelValid(modelDir)) {
-                    // Model not present or incomplete – download and unzip
-                    modelDir.deleteRecursively()
-                    downloadAndUnzipModel(modelDir)
-                    if (!isModelValid(modelDir)) {
-                        throw IOException("Model download/unzip succeeded but required files are missing")
-                    }
+                val destDir = File(context.filesDir, DEST_DIR)
+
+                // Delete & recopy model from assets every time to avoid corruption
+                copyModelFromAssetsFresh(destDir)
+
+                if (!isModelValid(destDir)) {
+                    throw IOException("Model files incomplete after copy. Check logs.")
                 }
 
-                // Load model – safe wrapping
-                model = loadModelSafely(modelDir.absolutePath)
+                model = loadModelSafely(destDir.absolutePath)
                 recognizer = createRecognizerSafely(model)
 
                 speechService = SpeechService(recognizer, 16000.0f)
                 speechService?.startListening(createVoskListener())
-
                 listener.onReady()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start Vosk", e)
@@ -88,79 +81,94 @@ class VoskSpeechManager(
         }.start()
     }
 
-    // -----------------------------------------------------------------
-    // Model validation
-    // -----------------------------------------------------------------
     private fun isModelValid(modelDir: File): Boolean {
-        val required = File(modelDir, REQUIRED_FILE)
+        val amFinalMdl = File(modelDir, "am/final.mdl")
         val conf = File(modelDir, "conf/model.conf")
-        return required.exists() && required.length() > 0 &&
+        return amFinalMdl.exists() && amFinalMdl.length() > 0 &&
                 conf.exists() && conf.length() > 0
     }
 
-    // -----------------------------------------------------------------
-    // Download & unzip
-    // -----------------------------------------------------------------
-    private fun downloadAndUnzipModel(targetDir: File) {
-        val zipFile = File(context.cacheDir, "vosk-model.zip")
-        try {
-            // Download
-            Log.i(TAG, "Downloading model from $MODEL_URL")
-            val url = URL(MODEL_URL)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 30000
-            connection.readTimeout = 60000
-            connection.connect()
+    private fun copyModelFromAssetsFresh(destDir: File) {
+        val assetModelPath = findModelInAssets()
+            ?: throw IOException("No model folder found in assets/$ASSETS_BASE")
 
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                throw IOException("Download failed with HTTP ${connection.responseCode}")
-            }
-
-            connection.inputStream.use { input ->
-                FileOutputStream(zipFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Log.i(TAG, "Downloaded model to ${zipFile.absolutePath} (${zipFile.length()} bytes)")
-
-            // Unzip
-            if (!targetDir.mkdirs()) {
-                throw IOException("Cannot create model directory ${targetDir.absolutePath}")
-            }
-
-            unzip(zipFile, targetDir)
-            Log.i(TAG, "Unzipped model to ${targetDir.absolutePath}")
-
-        } finally {
-            zipFile.delete() // clean up temporary zip
+        if (destDir.exists()) {
+            destDir.deleteRecursively()
         }
+        if (!destDir.mkdirs()) {
+            throw IOException("Cannot create model directory: ${destDir.absolutePath}")
+        }
+
+        copyAssetPathIterative(assetModelPath, destDir.absolutePath)
+        Log.i(TAG, "Model copied to ${destDir.absolutePath}")
+        logTree(destDir, 0)
     }
 
-    private fun unzip(zipFile: File, targetDir: File) {
-        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
-            var entry = zis.nextEntry
-            while (entry != null) {
-                val entryFile = File(targetDir, entry.name)
-                if (entry.isDirectory) {
-                    entryFile.mkdirs()
-                } else {
-                    // Ensure parent directories exist
-                    entryFile.parentFile?.mkdirs()
-                    FileOutputStream(entryFile).use { output ->
-                        zis.copyTo(output)
+    private fun copyAssetPathIterative(assetPath: String, targetPath: String) {
+        val queue = ArrayDeque<Pair<String, String>>()
+        queue.addLast(Pair(assetPath, targetPath))
+
+        while (queue.isNotEmpty()) {
+            val (currentAsset, currentTarget) = queue.removeFirst()
+            val children = context.assets.list(currentAsset)
+            if (children == null) {
+                // It's a file
+                try {
+                    context.assets.open(currentAsset).use { input ->
+                        val outFile = File(currentTarget)
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { output ->
+                            input.copyTo(output)
+                        }
                     }
-                    // Ensure the extracted file has correct permissions (optional)
+                } catch (e: IOException) {
+                    Log.e(TAG, "Failed to copy asset file $currentAsset", e)
                 }
-                zis.closeEntry()
-                entry = zis.nextEntry
+            } else {
+                // It's a directory
+                val targetDir = File(currentTarget)
+                if (!targetDir.exists() && !targetDir.mkdirs()) {
+                    Log.e(TAG, "Failed to create directory $currentTarget")
+                }
+                for (child in children) {
+                    queue.addLast(Pair("$currentAsset/$child", "$currentTarget/$child"))
+                }
             }
         }
     }
 
-    // -----------------------------------------------------------------
-    // Safe Vosk object creation
-    // -----------------------------------------------------------------
+    private fun findModelInAssets(): String? {
+        try {
+            val entries = context.assets.list(ASSETS_BASE) ?: return null
+            for (entry in entries) {
+                val path = "$ASSETS_BASE/$entry"
+                val sub = context.assets.list(path)
+                if (sub != null && sub.contains("am")) {
+                    return path
+                }
+            }
+            if (entries.contains("am")) {
+                return ASSETS_BASE
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Error scanning assets/$ASSETS_BASE", e)
+        }
+        return null
+    }
+
+    private fun logTree(dir: File, depth: Int) {
+        if (!dir.exists()) return
+        val prefix = "  ".repeat(depth)
+        for (f in dir.listFiles() ?: emptyArray()) {
+            if (f.isDirectory) {
+                Log.d(TAG, "$prefix[DIR ] ${f.name}")
+                logTree(f, depth + 1)
+            } else {
+                Log.d(TAG, "$prefix[FILE] ${f.name} (${f.length()} bytes)")
+            }
+        }
+    }
+
     private fun loadModelSafely(path: String): Model? {
         return try {
             Model(path)
@@ -186,9 +194,6 @@ class VoskSpeechManager(
         }
     }
 
-    // -----------------------------------------------------------------
-    // Speech listener and shutdown
-    // -----------------------------------------------------------------
     private fun createVoskListener(): org.vosk.android.RecognitionListener {
         return object : org.vosk.android.RecognitionListener {
             override fun onPartialResult(hypothesis: String) {
@@ -219,19 +224,11 @@ class VoskSpeechManager(
 
     fun stop() {
         isRunning = false
-        try {
-            speechService?.stop()
-        } catch (_: Exception) {}
+        try { speechService?.stop() } catch (_: Exception) {}
         speechService = null
-
-        try {
-            recognizer?.close()
-        } catch (_: Exception) {}
+        try { recognizer?.close() } catch (_: Exception) {}
         recognizer = null
-
-        try {
-            model?.close()
-        } catch (_: Exception) {}
+        try { model?.close() } catch (_: Exception) {}
         model = null
     }
 }
