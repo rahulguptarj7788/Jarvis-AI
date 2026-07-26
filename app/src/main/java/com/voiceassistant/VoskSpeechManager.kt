@@ -56,13 +56,15 @@ class VoskSpeechManager(
             try {
                 val modelDir = File(context.filesDir, DEST_DIR)
                 if (!isModelValid(modelDir)) {
+                    // Model not present or incomplete – download and unzip
                     modelDir.deleteRecursively()
                     downloadAndUnzipModel(modelDir)
                     if (!isModelValid(modelDir)) {
-                        throw IOException("Model download succeeded but required files missing")
+                        throw IOException("Model download/unzip succeeded but required files are missing")
                     }
                 }
 
+                // Load model – safe wrapping
                 model = loadModelSafely(modelDir.absolutePath)
                 recognizer = createRecognizerSafely(model)
 
@@ -75,29 +77,37 @@ class VoskSpeechManager(
                 listener.onError(e)
                 stop()
             } catch (e: Error) {
-                Log.e(TAG, "Native error", e)
+                Log.e(TAG, "Native error during Vosk initialization", e)
                 listener.onError(RuntimeException("Vosk native error: ${e.message}"))
                 stop()
             } catch (t: Throwable) {
                 Log.e(TAG, "Unexpected throwable", t)
-                listener.onError(RuntimeException("Unexpected: ${t.message}"))
+                listener.onError(RuntimeException("Unexpected error: ${t.message}"))
                 stop()
             }
         }.start()
     }
 
+    // -----------------------------------------------------------------
+    // Model validation
+    // -----------------------------------------------------------------
     private fun isModelValid(modelDir: File): Boolean {
-        val amFinalMdl = File(modelDir, REQUIRED_FILE)
+        val required = File(modelDir, REQUIRED_FILE)
         val conf = File(modelDir, "conf/model.conf")
-        return amFinalMdl.exists() && amFinalMdl.length() > 0 &&
+        return required.exists() && required.length() > 0 &&
                 conf.exists() && conf.length() > 0
     }
 
+    // -----------------------------------------------------------------
+    // Download & unzip
+    // -----------------------------------------------------------------
     private fun downloadAndUnzipModel(targetDir: File) {
         val zipFile = File(context.cacheDir, "vosk-model.zip")
         try {
+            // Download
             Log.i(TAG, "Downloading model from $MODEL_URL")
-            val connection = URL(MODEL_URL).openConnection() as HttpURLConnection
+            val url = URL(MODEL_URL)
+            val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 30000
             connection.readTimeout = 60000
@@ -108,15 +118,22 @@ class VoskSpeechManager(
             }
 
             connection.inputStream.use { input ->
-                FileOutputStream(zipFile).use { output -> input.copyTo(output) }
+                FileOutputStream(zipFile).use { output ->
+                    input.copyTo(output)
+                }
             }
-            Log.i(TAG, "Downloaded model: ${zipFile.length()} bytes")
+            Log.i(TAG, "Downloaded model to ${zipFile.absolutePath} (${zipFile.length()} bytes)")
 
-            if (!targetDir.mkdirs()) throw IOException("Cannot create model dir")
+            // Unzip
+            if (!targetDir.mkdirs()) {
+                throw IOException("Cannot create model directory ${targetDir.absolutePath}")
+            }
+
             unzip(zipFile, targetDir)
             Log.i(TAG, "Unzipped model to ${targetDir.absolutePath}")
+
         } finally {
-            zipFile.delete()
+            zipFile.delete() // clean up temporary zip
         }
     }
 
@@ -128,8 +145,12 @@ class VoskSpeechManager(
                 if (entry.isDirectory) {
                     entryFile.mkdirs()
                 } else {
+                    // Ensure parent directories exist
                     entryFile.parentFile?.mkdirs()
-                    FileOutputStream(entryFile).use { output -> zis.copyTo(output) }
+                    FileOutputStream(entryFile).use { output ->
+                        zis.copyTo(output)
+                    }
+                    // Ensure the extracted file has correct permissions (optional)
                 }
                 zis.closeEntry()
                 entry = zis.nextEntry
@@ -137,14 +158,17 @@ class VoskSpeechManager(
         }
     }
 
+    // -----------------------------------------------------------------
+    // Safe Vosk object creation
+    // -----------------------------------------------------------------
     private fun loadModelSafely(path: String): Model? {
         return try {
             Model(path)
         } catch (e: Exception) {
-            Log.e(TAG, "Model(path) Exception", e)
+            Log.e(TAG, "Model(path) threw Exception", e)
             throw e
         } catch (e: Error) {
-            Log.e(TAG, "Model(path) Error (native crash)", e)
+            Log.e(TAG, "Model(path) threw Error (native crash)", e)
             throw RuntimeException("Native crash while loading model", e)
         }
     }
@@ -157,11 +181,14 @@ class VoskSpeechManager(
             Log.e(TAG, "Recognizer creation failed", e)
             throw e
         } catch (e: Error) {
-            Log.e(TAG, "Recognizer creation crashed", e)
-            throw RuntimeException("Native crash creating recognizer", e)
+            Log.e(TAG, "Recognizer creation crashed (native)", e)
+            throw RuntimeException("Native crash while creating recognizer", e)
         }
     }
 
+    // -----------------------------------------------------------------
+    // Speech listener and shutdown
+    // -----------------------------------------------------------------
     private fun createVoskListener(): org.vosk.android.RecognitionListener {
         return object : org.vosk.android.RecognitionListener {
             override fun onPartialResult(hypothesis: String) {
@@ -192,11 +219,19 @@ class VoskSpeechManager(
 
     fun stop() {
         isRunning = false
-        try { speechService?.stop() } catch (_: Exception) {}
+        try {
+            speechService?.stop()
+        } catch (_: Exception) {}
         speechService = null
-        try { recognizer?.close() } catch (_: Exception) {}
+
+        try {
+            recognizer?.close()
+        } catch (_: Exception) {}
         recognizer = null
-        try { model?.close() } catch (_: Exception) {}
+
+        try {
+            model?.close()
+        } catch (_: Exception) {}
         model = null
     }
 }
