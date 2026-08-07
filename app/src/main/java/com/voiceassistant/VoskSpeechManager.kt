@@ -11,9 +11,6 @@ import org.vosk.android.SpeechService
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.zip.ZipInputStream
 
 class VoskSpeechManager(
     private val context: Context,
@@ -29,7 +26,6 @@ class VoskSpeechManager(
 
     companion object {
         private const val TAG = "VoskSpeechManager"
-        private const val MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
         private const val DEST_DIR = "model"
         private const val REQUIRED_FILE = "am/final.mdl"
     }
@@ -56,11 +52,10 @@ class VoskSpeechManager(
             try {
                 val modelDir = File(context.filesDir, DEST_DIR)
                 if (!isModelValid(modelDir)) {
-                    // Model not present or incomplete – download and unzip
                     modelDir.deleteRecursively()
-                    downloadAndUnzipModel(modelDir)
+                    copyModelFromAssets(modelDir)
                     if (!isModelValid(modelDir)) {
-                        throw IOException("Model download/unzip succeeded but required files are missing")
+                        throw IOException("Model copy from assets failed - required files missing")
                     }
                 }
 
@@ -99,61 +94,32 @@ class VoskSpeechManager(
     }
 
     // -----------------------------------------------------------------
-    // Download & unzip
+    // Copy model from Assets
     // -----------------------------------------------------------------
-    private fun downloadAndUnzipModel(targetDir: File) {
-        val zipFile = File(context.cacheDir, "vosk-model.zip")
-        try {
-            // Download
-            Log.i(TAG, "Downloading model from $MODEL_URL")
-            val url = URL(MODEL_URL)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 30000
-            connection.readTimeout = 60000
-            connection.connect()
-
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                throw IOException("Download failed with HTTP ${connection.responseCode}")
-            }
-
-            connection.inputStream.use { input ->
-                FileOutputStream(zipFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Log.i(TAG, "Downloaded model to ${zipFile.absolutePath} (${zipFile.length()} bytes)")
-
-            // Unzip
-            if (!targetDir.mkdirs()) {
-                throw IOException("Cannot create model directory ${targetDir.absolutePath}")
-            }
-
-            unzip(zipFile, targetDir)
-            Log.i(TAG, "Unzipped model to ${targetDir.absolutePath}")
-
-        } finally {
-            zipFile.delete() // clean up temporary zip
-        }
+    private fun copyModelFromAssets(targetDir: File) {
+        val assetPath = "models/vosk-model-small-en-us-0.15"
+        targetDir.mkdirs()
+        copyAssetFolder(assetPath, targetDir)
     }
 
-    private fun unzip(zipFile: File, targetDir: File) {
-        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
-            var entry = zis.nextEntry
-            while (entry != null) {
-                val entryFile = File(targetDir, entry.name)
-                if (entry.isDirectory) {
-                    entryFile.mkdirs()
-                } else {
-                    // Ensure parent directories exist
-                    entryFile.parentFile?.mkdirs()
-                    FileOutputStream(entryFile).use { output ->
-                        zis.copyTo(output)
-                    }
-                    // Ensure the extracted file has correct permissions (optional)
+    private fun copyAssetFolder(assetPath: String, targetDir: File) {
+        val am = context.assets
+        val files = am.list(assetPath) ?: return
+        if (files.isEmpty()) {
+            FileOutputStream(File(targetDir, "")).use {}
+            return
+        }
+        for (file in files) {
+            val childAssetPath = "$assetPath/$file"
+            val childFiles = am.list(childAssetPath)
+            val outFile = File(targetDir, file)
+            if (childFiles != null && childFiles.isNotEmpty()) {
+                outFile.mkdirs()
+                copyAssetFolder(childAssetPath, outFile)
+            } else {
+                am.open(childAssetPath).use { input ->
+                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
                 }
-                zis.closeEntry()
-                entry = zis.nextEntry
             }
         }
     }
