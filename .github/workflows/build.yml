@@ -36,25 +36,14 @@ jobs:
           echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      - name: Download Vosk model into app assets
+      - name: Download Vosk model zip into app assets
         run: |
           MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
           ASSETS_DIR="app/src/main/assets/models"
           mkdir -p $ASSETS_DIR
-          wget -q $MODEL_URL -O /tmp/vosk-model.zip
-          unzip -q /tmp/vosk-model.zip -d /tmp/vosk-extracted
-          # Ensure the extracted folder exists and move it
-          if [ -d "/tmp/vosk-extracted/vosk-model-small-en-us-0.15" ]; then
-            mv /tmp/vosk-extracted/vosk-model-small-en-us-0.15 $ASSETS_DIR/
-          else
-            # If the zip contains files directly, create the folder manually
-            mkdir -p $ASSETS_DIR/vosk-model-small-en-us-0.15
-            mv /tmp/vosk-extracted/* $ASSETS_DIR/vosk-model-small-en-us-0.15/
-          fi
-          rm -rf /tmp/vosk-extracted /tmp/vosk-model.zip
-          # Verify model files are present (at least one .gz file should exist)
-          echo "Model files in assets:"
-          find $ASSETS_DIR -type f | head -20
+          wget -q $MODEL_URL -O $ASSETS_DIR/vosk-model.zip
+          echo "Downloaded vosk-model.zip to assets:"
+          ls -lh $ASSETS_DIR/vosk-model.zip
 
       - name: Build debug APK
         uses: gradle/gradle-build-action@v3
