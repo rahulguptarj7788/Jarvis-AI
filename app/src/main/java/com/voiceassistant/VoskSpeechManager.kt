@@ -95,7 +95,7 @@ class VoskSpeechManager(
     }
 
     // -----------------------------------------------------------------
-    // Copy and unzip model from Assets
+    // Copy, unzip, and flatten model from Assets
     // -----------------------------------------------------------------
     private fun copyModelFromAssets(targetDir: File) {
         targetDir.mkdirs()
@@ -105,6 +105,25 @@ class VoskSpeechManager(
         }
         unzip(tempZip, targetDir)
         tempZip.delete()
+        flattenIfNested(targetDir)
+    }
+
+    private fun flattenIfNested(targetDir: File) {
+        val entries = targetDir.listFiles() ?: return
+        if (entries.size == 1 && entries[0].isDirectory) {
+            val nested = entries[0]
+            nested.listFiles()?.forEach { it.copyRecursively(File(targetDir, it.name), overwrite = true) }
+            nested.deleteRecursively()
+        }
+    }
+
+    private fun File.copyRecursively(target: File, overwrite: Boolean) {
+        if (this.isDirectory) {
+            target.mkdirs()
+            this.listFiles()?.forEach { it.copyRecursively(File(target, it.name), overwrite) }
+        } else {
+            this.copyTo(target, overwrite)
+        }
     }
 
     private fun unzip(zipFile: File, targetDir: File) {
@@ -203,3 +222,4 @@ class VoskSpeechManager(
         model = null
     }
 }
+
