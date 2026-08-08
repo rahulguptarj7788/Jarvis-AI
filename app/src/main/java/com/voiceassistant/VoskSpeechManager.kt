@@ -11,6 +11,7 @@ import org.vosk.android.SpeechService
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.zip.ZipInputStream
 
 class VoskSpeechManager(
     private val context: Context,
@@ -94,32 +95,33 @@ class VoskSpeechManager(
     }
 
     // -----------------------------------------------------------------
-    // Copy model from Assets
+    // Copy and unzip model from Assets
     // -----------------------------------------------------------------
     private fun copyModelFromAssets(targetDir: File) {
-        val assetPath = "models/vosk-model-small-en-us-0.15"
         targetDir.mkdirs()
-        copyAssetFolder(assetPath, targetDir)
+        val tempZip = File(context.cacheDir, "vosk-model.zip")
+        context.assets.open("models/vosk-model.zip").use { input ->
+            FileOutputStream(tempZip).use { output -> input.copyTo(output) }
+        }
+        unzip(tempZip, targetDir)
+        tempZip.delete()
     }
 
-    private fun copyAssetFolder(assetPath: String, targetDir: File) {
-        val am = context.assets
-        val files = am.list(assetPath) ?: return
-        if (files.isEmpty()) {
-            FileOutputStream(File(targetDir, "")).use {}
-            return
-        }
-        for (file in files) {
-            val childAssetPath = "$assetPath/$file"
-            val childFiles = am.list(childAssetPath)
-            val outFile = File(targetDir, file)
-            if (childFiles != null && childFiles.isNotEmpty()) {
-                outFile.mkdirs()
-                copyAssetFolder(childAssetPath, outFile)
-            } else {
-                am.open(childAssetPath).use { input ->
-                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
+    private fun unzip(zipFile: File, targetDir: File) {
+        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                val entryFile = File(targetDir, entry.name)
+                if (entry.isDirectory) {
+                    entryFile.mkdirs()
+                } else {
+                    entryFile.parentFile?.mkdirs()
+                    FileOutputStream(entryFile).use { output ->
+                        zis.copyTo(output)
+                    }
                 }
+                zis.closeEntry()
+                entry = zis.nextEntry
             }
         }
     }
