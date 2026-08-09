@@ -45,6 +45,12 @@ android {
     aaptOptions {
         noCompress("models")
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -55,4 +61,5 @@ dependencies {
 
     // Vosk offline speech recognition
     implementation("com.alphacephei:vosk-android:0.3.46")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
