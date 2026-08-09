@@ -49,6 +49,7 @@ jobs:
           mv $TMP_DIR/vosk-model-small-en-us-0.15 $ASSETS_DIR/model
           rm -f /tmp/vosk-model.zip
           rm -rf $TMP_DIR
+          uuidgen > $ASSETS_DIR/model/uuid
           echo "Model files:"
           find $ASSETS_DIR/model -maxdepth 1
 
