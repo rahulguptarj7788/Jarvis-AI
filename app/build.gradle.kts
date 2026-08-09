@@ -60,6 +60,8 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
     // Vosk offline speech recognition
-    implementation("com.alphacephei:vosk-android:0.3.46")
+    implementation("com.alphacephei:vosk-android:0.3.46") {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
     implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
