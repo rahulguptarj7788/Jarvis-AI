@@ -46,7 +46,7 @@ class VoskSpeechManager(
         }
 
         try {
-            StorageService.unpack(context, "models/vosk-model-small-en-us-0.15", "model",
+            StorageService.unpack(context, "model", "model",
                 { unpackedModel ->
                     try {
                         model = unpackedModel
