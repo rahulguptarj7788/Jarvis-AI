@@ -39,13 +39,18 @@ jobs:
       - name: Download and extract Vosk model into app assets
         run: |
           MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-          ASSETS_DIR="app/src/main/assets/models"
+          ASSETS_DIR="app/src/main/assets"
+          TMP_DIR="/tmp/vosk-extract"
           mkdir -p $ASSETS_DIR
+          rm -rf $TMP_DIR && mkdir -p $TMP_DIR
           wget -q $MODEL_URL -O /tmp/vosk-model.zip
-          unzip -q /tmp/vosk-model.zip -d $ASSETS_DIR
+          unzip -q /tmp/vosk-model.zip -d $TMP_DIR
+          rm -rf $ASSETS_DIR/model
+          mv $TMP_DIR/vosk-model-small-en-us-0.15 $ASSETS_DIR/model
           rm -f /tmp/vosk-model.zip
+          rm -rf $TMP_DIR
           echo "Model files:"
-          find $ASSETS_DIR -maxdepth 2
+          find $ASSETS_DIR/model -maxdepth 1
 
       - name: Build debug APK
         uses: gradle/gradle-build-action@v3
