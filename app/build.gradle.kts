@@ -42,8 +42,8 @@ android {
         viewBinding = true
     }
 
-    aaptOptions {
-        noCompress("models")
+    androidResources {
+        noCompress += "model"
     }
 
     packaging {
