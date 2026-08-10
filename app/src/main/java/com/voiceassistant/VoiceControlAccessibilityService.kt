@@ -80,7 +80,6 @@ class VoiceControlAccessibilityService : AccessibilityService() {
     }
 
     private fun scrollScreen(direction: CommandAction.Scroll.Direction) {
-        // Simulate a vertical swipe gesture
         val displayMetrics = resources.displayMetrics
         val width = displayMetrics.widthPixels
         val height = displayMetrics.heightPixels
@@ -89,14 +88,12 @@ class VoiceControlAccessibilityService : AccessibilityService() {
         val startY: Float
         val endY: Float
 
-        // Swipe up -> scroll down (show lower content)
-        // Swipe down -> scroll up (show upper content)
         if (direction == CommandAction.Scroll.Direction.DOWN) {
-            startY = height * 0.7f
-            endY = height * 0.3f
+            startY = height * 0.75f
+            endY = height * 0.35f
         } else { // UP
-            startY = height * 0.3f
-            endY = height * 0.7f
+            startY = height * 0.35f
+            endY = height * 0.75f
         }
 
         val swipePath = Path().apply {
