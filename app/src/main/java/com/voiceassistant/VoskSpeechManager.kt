@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.SpeechService
@@ -88,14 +89,14 @@ class VoskSpeechManager(
     private fun createVoskListener(): org.vosk.android.RecognitionListener {
         return object : org.vosk.android.RecognitionListener {
             override fun onPartialResult(hypothesis: String) {
-                listener.onPartialResult(hypothesis)
+                listener.onPartialResult(extractPartialText(hypothesis))
             }
             override fun onResult(hypothesis: String) {
-                listener.onFinalResult(hypothesis)
+                listener.onFinalResult(extractText(hypothesis))
                 stop()
             }
             override fun onFinalResult(hypothesis: String) {
-                listener.onFinalResult(hypothesis)
+                listener.onFinalResult(extractText(hypothesis))
                 stop()
             }
             override fun onError(exception: Exception) {
@@ -106,6 +107,22 @@ class VoskSpeechManager(
                 listener.onTimeout()
                 stop()
             }
+        }
+    }
+
+    private fun extractText(json: String): String {
+        return try {
+            JSONObject(json).optString("text", "")
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    private fun extractPartialText(json: String): String {
+        return try {
+            JSONObject(json).optString("partial", "")
+        } catch (e: Exception) {
+            ""
         }
     }
 
