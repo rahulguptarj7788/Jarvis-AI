@@ -58,6 +58,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        isListening = true
+        binding.listenToggleButton.isChecked = true
+
         voskManager = VoskSpeechManager(this, object : VoskSpeechManager.RecognitionListener {
             override fun onReady() {
                 runOnUiThread {
@@ -80,6 +83,11 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         Toast.makeText(this@MainActivity, "Could not understand command", Toast.LENGTH_SHORT).show()
                     }
+                    if (isListening) {
+                        voskManager?.stop()
+                        voskManager = null
+                        startListening()
+                    }
                 }
             }
 
@@ -92,19 +100,22 @@ class MainActivity : AppCompatActivity() {
 
             override fun onTimeout() {
                 runOnUiThread {
-                    stopListening()
+                    if (isListening) {
+                        voskManager?.stop()
+                        voskManager = null
+                        startListening()
+                    }
                 }
             }
         })
 
         voskManager?.start()
-        isListening = true
     }
 
     private fun stopListening() {
+        isListening = false
         voskManager?.stop()
         voskManager = null
-        isListening = false
         binding.statusTextView.text = getString(R.string.status_not_listening)
         binding.listenToggleButton.isChecked = false
     }
@@ -125,6 +136,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isListening = false
         voskManager?.stop()
     }
 
