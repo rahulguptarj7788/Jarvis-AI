@@ -50,7 +50,8 @@ class VoiceControlAccessibilityService : AccessibilityService() {
 
     private fun openApp(appName: String) {
         val pm = packageManager
-        val intent = pm.getLaunchIntentForPackage(getPackageNameForApp(appName))
+        val targetPackage = getPackageNameForApp(appName)
+        val intent = pm.getLaunchIntentForPackage(targetPackage)
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
@@ -64,17 +65,19 @@ class VoiceControlAccessibilityService : AccessibilityService() {
     }
 
     private fun getPackageNameForApp(appName: String): String {
-        val lowerName = appName.lowercase()
+        val lowerName = appName.lowercase().trim()
         return when {
+            lowerName.contains("youtube") -> "com.google.android.youtube"
             lowerName.contains("chrome") -> "com.android.chrome"
             lowerName.contains("gmail") -> "com.google.android.gm"
             lowerName.contains("maps") -> "com.google.android.apps.maps"
-            lowerName.contains("youtube") -> "com.google.android.youtube"
             lowerName.contains("camera") -> "com.android.camera"
             lowerName.contains("settings") -> "com.android.settings"
             lowerName.contains("calculator") -> "com.android.calculator2"
             lowerName.contains("calendar") -> "com.google.android.calendar"
             lowerName.contains("clock") -> "com.google.android.deskclock"
+            lowerName.contains("cloud") || lowerName.contains("drive") -> "com.google.android.apps.docs"
+            lowerName.contains("whatsapp") -> "com.whatsapp"
             else -> "com.android.vending"
         }
     }
@@ -91,7 +94,7 @@ class VoiceControlAccessibilityService : AccessibilityService() {
         if (direction == CommandAction.Scroll.Direction.DOWN) {
             startY = height * 0.75f
             endY = height * 0.35f
-        } else { // UP
+        } else {
             startY = height * 0.35f
             endY = height * 0.75f
         }
