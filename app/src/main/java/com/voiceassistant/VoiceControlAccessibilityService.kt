@@ -5,12 +5,10 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
-import android.graphics.Rect
-import android.os.Build
 import android.os.Bundle
-import android.util.DisplayMetrics
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Toast
 import com.voiceassistant.model.CommandAction
 
 class VoiceControlAccessibilityService : AccessibilityService() {
@@ -48,40 +46,96 @@ class VoiceControlAccessibilityService : AccessibilityService() {
         }
     }
 
+    // -----------------------------------------------------------------
+    // App launching with fuzzy matching
+    // -----------------------------------------------------------------
     private fun openApp(appName: String) {
+        val query = cleanQuery(appName)
+        if (query.isEmpty()) {
+            showAppNotFoundToast()
+            return
+        }
+
         val pm = packageManager
-        val targetPackage = getPackageNameForApp(appName)
-        val intent = pm.getLaunchIntentForPackage(targetPackage)
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
-        } else {
-            val launchIntent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val resolvedApps = pm.queryIntentActivities(mainIntent, 0)
+
+        var bestMatch: android.content.pm.ResolveInfo? = null
+        var bestScore = 0.0
+
+        for (app in resolvedApps) {
+            val label = app.loadLabel(pm).toString().lowercase().trim()
+            if (label.isEmpty()) continue
+
+            val partialBonus = if (label.contains(query) || query.contains(label)) 0.3 else 0.0
+            val score = similarity(query, label) + partialBonus
+
+            if (score > bestScore) {
+                bestScore = score
+                bestMatch = app
             }
-            startActivity(launchIntent)
+        }
+
+        if (bestMatch != null && bestScore >= 0.6) {
+            val packageName = bestMatch.activityInfo.packageName
+            val launchIntent = pm.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launchIntent)
+                return
+            }
+        }
+
+        showAppNotFoundToast()
+    }
+
+    private fun cleanQuery(rawInput: String): String {
+        val stopWords = listOf("open", "launch", "start", "go to")
+        var cleaned = rawInput.lowercase().trim()
+        for (word in stopWords) {
+            cleaned = cleaned.removePrefix(word).trim()
+        }
+        return cleaned
+    }
+
+    private fun showAppNotFoundToast() {
+        android.os.Handler(mainLooper).post {
+            Toast.makeText(
+                applicationContext,
+                "App not found. Please download it or specify its web version.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
-    private fun getPackageNameForApp(appName: String): String {
-        val lowerName = appName.lowercase().trim()
-        return when {
-            lowerName.contains("youtube") -> "com.google.android.youtube"
-            lowerName.contains("chrome") -> "com.android.chrome"
-            lowerName.contains("gmail") -> "com.google.android.gm"
-            lowerName.contains("maps") -> "com.google.android.apps.maps"
-            lowerName.contains("camera") -> "com.android.camera"
-            lowerName.contains("settings") -> "com.android.settings"
-            lowerName.contains("calculator") -> "com.android.calculator2"
-            lowerName.contains("calendar") -> "com.google.android.calendar"
-            lowerName.contains("clock") -> "com.google.android.deskclock"
-            lowerName.contains("cloud") || lowerName.contains("drive") -> "com.google.android.apps.docs"
-            lowerName.contains("whatsapp") -> "com.whatsapp"
-            else -> "com.android.vending"
-        }
+    private fun similarity(a: String, b: String): Double {
+        val maxLen = maxOf(a.length, b.length)
+        if (maxLen == 0) return 1.0
+        val distance = levenshtein(a, b)
+        return 1.0 - (distance.toDouble() / maxLen)
     }
 
+    private fun levenshtein(a: String, b: String): Int {
+        val dp = Array(a.length + 1) { IntArray(b.length + 1) }
+        for (i in 0..a.length) dp[i][0] = i
+        for (j in 0..b.length) dp[0][j] = j
+        for (i in 1..a.length) {
+            for (j in 1..b.length) {
+                dp[i][j] = if (a[i - 1] == b[j - 1]) {
+                    dp[i - 1][j - 1]
+                } else {
+                    1 + minOf(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+                }
+            }
+        }
+        return dp[a.length][b.length]
+    }
+
+    // -----------------------------------------------------------------
+    // Scroll
+    // -----------------------------------------------------------------
     private fun scrollScreen(direction: CommandAction.Scroll.Direction) {
         val displayMetrics = resources.displayMetrics
         val width = displayMetrics.widthPixels
@@ -110,6 +164,9 @@ class VoiceControlAccessibilityService : AccessibilityService() {
         dispatchGesture(gestureBuilder.build(), null, null)
     }
 
+    // -----------------------------------------------------------------
+    // Type text
+    // -----------------------------------------------------------------
     private fun typeText(text: String) {
         val root = rootInActiveWindow ?: return
         val focusedNode = findFocusedEditText(root)
