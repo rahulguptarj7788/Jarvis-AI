@@ -2,16 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.voiceassistant">
 
-    <!-- Required for microphone input -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <!-- Required for downloading the Vosk model at runtime -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Optional: for floating UI if needed later -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
-    <!-- Required to query all installed apps for fuzzy app-name matching -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <uses-feature
@@ -34,9 +27,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Accessibility service for performing voice-controlled actions -->
         <service
-            android:name=".VoiceControlAccessibilityService"
+            android:name="com.voiceassistant.VoiceControlAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
