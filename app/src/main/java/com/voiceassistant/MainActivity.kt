@@ -3,6 +3,7 @@ package com.voiceassistant
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -10,7 +11,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.voiceassistant.databinding.ActivityMainBinding
-import com.voiceassistant.model.CommandAction
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,6 +31,12 @@ class MainActivity : AppCompatActivity() {
             openAccessibilitySettings()
         }
 
+        // Long press accessibility button to open Default Assistant Settings
+        binding.accessibilitySettingsButton.setOnLongClickListener {
+            openDefaultAssistantSettings()
+            true
+        }
+
         checkPermissions()
     }
 
@@ -47,7 +53,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (!isAccessibilityServiceEnabled()) {
-            Toast.makeText(this, "Please enable the accessibility service first", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Please enable accessibility service", Toast.LENGTH_LONG).show()
             binding.listenToggleButton.isChecked = false
             return
         }
@@ -131,6 +137,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun openAccessibilitySettings() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        startActivity(intent)
+    }
+
+    private fun openDefaultAssistantSettings() {
+        val intent = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
         startActivity(intent)
     }
 
