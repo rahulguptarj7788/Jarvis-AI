@@ -8,8 +8,8 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.myjarvis.offlineapp"
-        minSdk = 24
+        applicationId = "com.voiceassistant"
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -65,3 +65,4 @@ dependencies {
     }
     implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
+
