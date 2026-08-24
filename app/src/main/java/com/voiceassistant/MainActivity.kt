@@ -3,10 +3,10 @@ package com.voiceassistant
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -31,10 +31,12 @@ class MainActivity : AppCompatActivity() {
             openAccessibilitySettings()
         }
 
-        // Long press accessibility button to open Default Assistant Settings
-        binding.accessibilitySettingsButton.setOnLongClickListener {
+        binding.setDefaultAssistantButton.setOnClickListener {
             openDefaultAssistantSettings()
-            true
+        }
+
+        binding.showAppsButton.setOnClickListener {
+            showInstalledAppsDialog()
         }
 
         checkPermissions()
@@ -87,7 +89,7 @@ class MainActivity : AppCompatActivity() {
                     if (command != null) {
                         VoiceControlAccessibilityService.instance?.executeCommand(command)
                     } else {
-                        Toast.makeText(this@MainActivity, "Could not understand command", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Could not understand: $hypothesis", Toast.LENGTH_SHORT).show()
                     }
                     if (isListening) {
                         voskManager?.stop()
@@ -126,6 +128,20 @@ class MainActivity : AppCompatActivity() {
         binding.listenToggleButton.isChecked = false
     }
 
+    private fun showInstalledAppsDialog() {
+        val pm = packageManager
+        val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        val appNames = packages.map { app ->
+            "${pm.getApplicationLabel(app)} (${app.packageName})"
+        }.sorted().toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("Installed Apps (${appNames.size})")
+            .setItems(appNames, null)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun isAccessibilityServiceEnabled(): Boolean {
         val service = packageName + "/" + VoiceControlAccessibilityService::class.java.name
         val enabledServices = Settings.Secure.getString(
@@ -155,3 +171,4 @@ class MainActivity : AppCompatActivity() {
         private const val REQUEST_RECORD_AUDIO = 101
     }
 }
+
