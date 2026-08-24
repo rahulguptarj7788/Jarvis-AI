@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.voiceassistant"
+        applicationId = "com.jarvis.assistant.ai"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -65,4 +65,3 @@ dependencies {
     }
     implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
-
