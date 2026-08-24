@@ -22,7 +22,7 @@
         android:layout_height="wrap_content"
         android:text="@string/status_not_listening"
         android:textSize="18sp"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="20dp"
         app:layout_constraintTop_toBottomOf="@id/titleTextView"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
@@ -33,7 +33,7 @@
         android:layout_height="wrap_content"
         android:textOn="@string/stop_listening"
         android:textOff="@string/start_listening"
-        android:layout_marginTop="48dp"
+        android:layout_marginTop="20dp"
         app:layout_constraintTop_toBottomOf="@id/statusTextView"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
@@ -43,8 +43,28 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="@string/open_accessibility_settings"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="16dp"
         app:layout_constraintTop_toBottomOf="@id/listenToggleButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <Button
+        android:id="@+id/setDefaultAssistantButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Set Default Assistant Settings"
+        android:layout_marginTop="10dp"
+        app:layout_constraintTop_toBottomOf="@id/accessibilitySettingsButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <Button
+        android:id="@+id/showAppsButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Show All Installed Apps List"
+        android:layout_marginTop="10dp"
+        app:layout_constraintTop_toBottomOf="@id/setDefaultAssistantButton"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
@@ -55,9 +75,10 @@
         android:text=""
         android:textSize="16sp"
         android:gravity="center"
-        android:layout_marginTop="32dp"
-        app:layout_constraintTop_toBottomOf="@id/accessibilitySettingsButton"
+        android:layout_marginTop="20dp"
+        app:layout_constraintTop_toBottomOf="@id/showAppsButton"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
