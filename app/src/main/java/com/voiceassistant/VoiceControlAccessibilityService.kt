@@ -6,6 +6,7 @@ import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
@@ -47,7 +48,7 @@ class VoiceControlAccessibilityService : AccessibilityService() {
     }
 
     // -----------------------------------------------------------------
-    // App launching with fuzzy matching
+    // Direct & Fuzzy App Launcher Logic
     // -----------------------------------------------------------------
     private fun openApp(appName: String) {
         val query = cleanQuery(appName)
@@ -56,12 +57,37 @@ class VoiceControlAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Standard System Actions Check (Camera, etc.)
+        if (query == "camera") {
+            val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+                return
+            }
+        }
+
         val pm = packageManager
         val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
         val resolvedApps = pm.queryIntentActivities(mainIntent, 0)
 
+        // 1. Direct Package / Label Contains Match
+        for (app in resolvedApps) {
+            val label = app.loadLabel(pm).toString().lowercase().trim()
+            if (label == query || label.contains(query) || query.contains(label)) {
+                val launchIntent = pm.getLaunchIntentForPackage(app.activityInfo.packageName)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launchIntent)
+                    return
+                }
+            }
+        }
+
+        // 2. Fuzzy Score Match (Lower threshold for stability)
         var bestMatch: android.content.pm.ResolveInfo? = null
         var bestScore = 0.0
 
@@ -69,16 +95,14 @@ class VoiceControlAccessibilityService : AccessibilityService() {
             val label = app.loadLabel(pm).toString().lowercase().trim()
             if (label.isEmpty()) continue
 
-            val partialBonus = if (label.contains(query) || query.contains(label)) 0.3 else 0.0
-            val score = similarity(query, label) + partialBonus
-
+            val score = similarity(query, label)
             if (score > bestScore) {
                 bestScore = score
                 bestMatch = app
             }
         }
 
-        if (bestMatch != null && bestScore >= 0.6) {
+        if (bestMatch != null && bestScore >= 0.35) {
             val packageName = bestMatch.activityInfo.packageName
             val launchIntent = pm.getLaunchIntentForPackage(packageName)
             if (launchIntent != null) {
@@ -92,7 +116,7 @@ class VoiceControlAccessibilityService : AccessibilityService() {
     }
 
     private fun cleanQuery(rawInput: String): String {
-        val stopWords = listOf("open", "launch", "start", "go to")
+        val stopWords = listOf("open", "launch", "start", "go to", "kholo", "chalao")
         var cleaned = rawInput.lowercase().trim()
         for (word in stopWords) {
             cleaned = cleaned.removePrefix(word).trim()
@@ -104,7 +128,7 @@ class VoiceControlAccessibilityService : AccessibilityService() {
         android.os.Handler(mainLooper).post {
             Toast.makeText(
                 applicationContext,
-                "App not found. Please download it or specify its web version.",
+                "App not found.",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -195,3 +219,4 @@ class VoiceControlAccessibilityService : AccessibilityService() {
         var instance: VoiceControlAccessibilityService? = null
     }
 }
+
