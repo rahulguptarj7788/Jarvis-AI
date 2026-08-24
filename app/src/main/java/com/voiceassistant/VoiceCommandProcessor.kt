@@ -7,24 +7,43 @@ object VoiceCommandProcessor {
     fun parse(text: String): CommandAction? {
         val normalized = text.lowercase().trim()
 
-        // "open <app>"
-        val openRegex = Regex("""^open\s+(.+)$""")
-        openRegex.matchEntire(normalized)?.let {
-            val appName = it.groupValues[1].trim()
-            if (appName.isNotEmpty()) return CommandAction.OpenApp(appName)
+        if (normalized.isEmpty()) return null
+
+        // Flexible Open App Matching (Direct Keyword Detection)
+        if (normalized.contains("camera") || normalized.contains("kamra")) {
+            return CommandAction.OpenApp("camera")
+        }
+        if (normalized.contains("youtube") || normalized.contains("utube") || normalized.contains("you tube")) {
+            return CommandAction.OpenApp("youtube")
+        }
+        if (normalized.contains("chrome") || normalized.contains("browser")) {
+            return CommandAction.OpenApp("chrome")
         }
 
-        // "scroll up" / "scroll down"
-        if (normalized == "scroll up") return CommandAction.Scroll(CommandAction.Scroll.Direction.UP)
-        if (normalized == "scroll down") return CommandAction.Scroll(CommandAction.Scroll.Direction.DOWN)
+        // Standard Open Prefix Matching
+        val openPrefixes = listOf("open ", "launch ", "kholo ", "chalao ")
+        for (prefix in openPrefixes) {
+            if (normalized.startsWith(prefix)) {
+                val appName = normalized.removePrefix(prefix).trim()
+                if (appName.isNotEmpty()) return CommandAction.OpenApp(appName)
+            }
+        }
 
-        // "type <text>"
-        val typeRegex = Regex("""^type\s+(.+)$""")
-        typeRegex.matchEntire(normalized)?.let {
-            val textToType = it.groupValues[1].trim()
+        // Scroll Actions
+        if (normalized.contains("scroll up") || normalized.contains("upar")) {
+            return CommandAction.Scroll(CommandAction.Scroll.Direction.UP)
+        }
+        if (normalized.contains("scroll down") || normalized.contains("niche")) {
+            return CommandAction.Scroll(CommandAction.Scroll.Direction.DOWN)
+        }
+
+        // Type Action
+        if (normalized.startsWith("type ")) {
+            val textToType = normalized.removePrefix("type ").trim()
             if (textToType.isNotEmpty()) return CommandAction.TypeText(textToType)
         }
 
         return null
     }
 }
+
