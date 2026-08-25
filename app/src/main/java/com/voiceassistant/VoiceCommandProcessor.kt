@@ -7,13 +7,13 @@ object VoiceCommandProcessor {
     fun parse(text: String): CommandAction? {
         val normalized = text.lowercase().trim()
 
-        if (normalized.isEmpty()) return null
+        if (normalized.isEmpty() || normalized == "[unk]") return null
 
-        // Flexible Open App Matching (Direct Keyword Detection)
-        if (normalized.contains("camera") || normalized.contains("kamra")) {
+        // Direct Keyword Matching for Grammar Words
+        if (normalized.contains("camera")) {
             return CommandAction.OpenApp("camera")
         }
-        if (normalized.contains("youtube") || normalized.contains("utube") || normalized.contains("you tube")) {
+        if (normalized.contains("youtube")) {
             return CommandAction.OpenApp("youtube")
         }
         if (normalized.contains("chrome") || normalized.contains("browser")) {
@@ -46,4 +46,3 @@ object VoiceCommandProcessor {
         return null
     }
 }
-
